@@ -29,10 +29,29 @@ def get_chat_response(api_key, model, messages):
         # 3. Estraiamo il succo dal pacchetto gigante che ci torna indietro
         obj_msg = response.choices[0].message
         
+        # Estraiamo i dati grezzi
+        content = obj_msg.content
+        reasoning = getattr(obj_msg, "reasoning_details", None)
+        
+        # --- IL NOSTRO NUOVO "SALVAGENTE" ---
+        # A. Se il modello non manda una risposta formale, togliamo il brutto "None"
+        if content is None:
+            content = ""
+            
+        # B. Se la risposta è vuota, ma ha scritto tutto nel box del ragionamento...
+        if content == "" and reasoning:
+            # Se è una lista formattata (come succede a volte con Tencent/Nemotron)
+            if isinstance(reasoning, list) and len(reasoning) > 0 and 'text' in reasoning[0]:
+                content = reasoning[0]['text']
+            # Se è solo una lunga stringa di testo
+            elif isinstance(reasoning, str):
+                content = reasoning
+        # -----------------------------------
+        
         # Prepariamo un "dizionario" pulito da restituire all'interfaccia grafica
         return {
-            "content": obj_msg.content, # Il testo della risposta
-            "reasoning": getattr(obj_msg, "reasoning_details", None) # Il JSON del ragionamento (se c'è)
+            "content": content, # Il testo della risposta (ora sempre valido)
+            "reasoning": reasoning # Il JSON del ragionamento (se c'è)
         }
         
     except Exception as e:

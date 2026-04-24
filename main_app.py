@@ -15,6 +15,10 @@ st.set_page_config(page_title="Multi-Model CoT Chat", page_icon="🧠", layout="
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# --- NOVITÀ: Memoria per il cambio modello ---
+if "current_model" not in st.session_state:
+    st.session_state.current_model = list(FREE_MODELS.keys())[0]
+
 # 2. COSTRUZIONE DELLA BARRA LATERALE (SIDEBAR)
 with st.sidebar:
     st.title("⚙️ Setup Chat")
@@ -27,6 +31,11 @@ with st.sidebar:
     selected_model_name = st.selectbox("🤖 Scegli il Modello Free", list(FREE_MODELS.keys()))
     # Prende il codice esatto del modello scelto
     model_id = FREE_MODELS[selected_model_name] 
+    
+    # --- NOVITÀ: Toast di conferma quando cambi modello ---
+    if selected_model_name != st.session_state.current_model:
+        st.session_state.current_model = selected_model_name
+        st.toast(f"✅ Modello aggiornato a: {selected_model_name}", icon="🔄")
     
     # Menu a tendina per il ruolo dell'IA (legge dal file config.py)
     preset_name = st.selectbox("🎭 Scegli un Ruolo", list(CHAT_PRESETS.keys()))
@@ -94,5 +103,13 @@ if prompt := st.chat_input("Scrivi qui il tuo messaggio..."):
                 })
                 
             except Exception as e:
-                # Se il motore va in errore, mostriamo il messaggio rosso
-                st.error(str(e))
+                # Se c'è un errore, lo convertiamo in testo per analizzarlo
+                error_msg = str(e)
+                
+                # --- NOVITÀ: Gestione elegante del Traffico Intenso (Errore 429) ---
+                if "429" in error_msg or "rate-limited" in error_msg:
+                    st.error("🚦 **Traffico Intenso sul Server!**")
+                    st.warning(f"Il modello **{selected_model_name}** al momento è sovraccarico (Troppi utenti stanno usando la versione Free).\n\n👉 **Soluzione:** Scegli un altro modello dal menu a sinistra per continuare a chattare!")
+                else:
+                    # Per tutti gli altri tipi di errori, mostriamo il messaggio originale
+                    st.error(f"❌ Ops! Errore di comunicazione: {error_msg}")
