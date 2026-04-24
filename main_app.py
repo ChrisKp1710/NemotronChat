@@ -1,4 +1,4 @@
-# main_app.py
+# app.py
 
 # Questo è il file "Vetrina". È quello che avvierai nel terminale.
 # Si occupa solo di disegnare la grafica con Streamlit e usare gli altri due file per far funzionare tutto.
@@ -9,7 +9,8 @@ from config import FREE_MODELS, CHAT_PRESETS
 from api_engine import get_chat_response
 
 # 1. CONFIGURAZIONE PAGINA
-st.set_page_config(page_title="Multi-Model CoT Chat", page_icon="🧠", layout="wide")
+st.set_page_config(page_title="MindMatrix Chat", page_icon="🧠", layout="wide")
+st.title("🧠 MindMatrix: Multi-Model Reasoning")
 
 # Inizializziamo subito la lista dei messaggi se non esiste
 if "messages" not in st.session_state:
@@ -106,10 +107,16 @@ if prompt := st.chat_input("Scrivi qui il tuo messaggio..."):
                 # Se c'è un errore, lo convertiamo in testo per analizzarlo
                 error_msg = str(e)
                 
-                # --- NOVITÀ: Gestione elegante del Traffico Intenso (Errore 429) ---
+                # --- GESTIONE 1: Traffico Intenso (Errore 429) ---
                 if "429" in error_msg or "rate-limited" in error_msg:
                     st.error("🚦 **Traffico Intenso sul Server!**")
                     st.warning(f"Il modello **{selected_model_name}** al momento è sovraccarico (Troppi utenti stanno usando la versione Free).\n\n👉 **Soluzione:** Scegli un altro modello dal menu a sinistra per continuare a chattare!")
+                
+                # --- GESTIONE 2: Pacchetto Vuoto (Errore NoneType/Server OpenRouter) ---
+                elif "pacchetto vuoto" in error_msg.lower() or "nonetype" in error_msg.lower():
+                    st.error("🔌 **Piccolo singhiozzo del Server!**")
+                    st.info(f"Il server gratuito di OpenRouter che ospita **{selected_model_name}** ha avuto un momento di confusione e non ha inviato la risposta.\n\n✅ *Tranquillo, non hai rotto nulla e la tua chiave API è perfetta!*\n\n👉 **Cosa fare:** Riprova a fargli la stessa domanda, oppure scegli un altro modello dal menu a sinistra.")
+                
+                # --- GESTIONE 3: Tutti gli altri errori ---
                 else:
-                    # Per tutti gli altri tipi di errori, mostriamo il messaggio originale
                     st.error(f"❌ Ops! Errore di comunicazione: {error_msg}")
