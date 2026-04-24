@@ -36,10 +36,10 @@ if "messages" not in st.session_state:
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
-        # 🌟 MIGLIORIA 2: Coerenza visiva (usiamo st.markdown per il testo)
+        # 🌟 MIGLIORIA 2: Usiamo st.json per avere la formattazione perfetta e il tasto copia
         if "reasoning_details" in msg and msg["reasoning_details"]:
             with st.expander("💭 Dettagli ragionamento"):
-                st.markdown(msg["reasoning_details"])
+                st.json(msg["reasoning_details"])
 
 # --- LOGICA CHAT (NUOVI MESSAGGI) ---
 if prompt := st.chat_input("Chiedimi qualcosa (es. Quante 'r' ci sono in strawberry?)"):
@@ -68,10 +68,10 @@ if prompt := st.chat_input("Chiedimi qualcosa (es. Quante 'r' ci sono in strawbe
                 # Mostriamo la risposta finale
                 st.markdown(content)
                 
-                # Mostriamo il ragionamento con lo stesso stile dello storico
+                # Mostriamo il ragionamento formattato in JSON
                 if reasoning_details:
                     with st.expander("💭 Dettagli ragionamento"):
-                        st.markdown(reasoning_details)
+                        st.json(reasoning_details)
 
                 # Salviamo nello storico
                 st.session_state.messages.append({
