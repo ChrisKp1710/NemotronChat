@@ -1,122 +1,120 @@
-# app.py
-
-# Questo è il file "Vetrina". È quello che avvierai nel terminale.
-# Si occupa solo di disegnare la grafica con Streamlit e usare gli altri due file per far funzionare tutto.
+# main_app.py
 
 import streamlit as st
-# Importiamo la nostra banca dati e il nostro motore dagli altri file creati!
 from config import FREE_MODELS, CHAT_PRESETS
-from api_engine import get_chat_response
+from api_engine import get_chat_response_stream
 
 # 1. CONFIGURAZIONE PAGINA
 st.set_page_config(page_title="MindMatrix Chat", page_icon="🧠", layout="wide")
-st.title("🧠 MindMatrix: Multi-Model Reasoning")
+st.title("🧠 MindMatrix: Multi-Model Streaming")
 
-# Inizializziamo subito la lista dei messaggi se non esiste
+# Inizializzazione session_state
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- NOVITÀ: Memoria per il cambio modello ---
 if "current_model" not in st.session_state:
     st.session_state.current_model = list(FREE_MODELS.keys())[0]
 
-# 2. COSTRUZIONE DELLA BARRA LATERALE (SIDEBAR)
+# 2. SIDEBAR
 with st.sidebar:
     st.title("⚙️ Setup Chat")
-    
-    # Inserimento Password
     api_key = st.text_input("OpenRouter API Key", type="password")
     st.divider()
     
-    # Menu a tendina per scegliere il modello (legge dal file config.py)
     selected_model_name = st.selectbox("🤖 Scegli il Modello Free", list(FREE_MODELS.keys()))
-    # Prende il codice esatto del modello scelto
     model_id = FREE_MODELS[selected_model_name] 
     
-    # --- NOVITÀ: Toast di conferma quando cambi modello ---
     if selected_model_name != st.session_state.current_model:
         st.session_state.current_model = selected_model_name
-        st.toast(f"✅ Modello aggiornato a: {selected_model_name}", icon="🔄")
+        st.toast(f"✅ Modello aggiornato: {selected_model_name}", icon="🔄")
     
-    # Menu a tendina per il ruolo dell'IA (legge dal file config.py)
     preset_name = st.selectbox("🎭 Scegli un Ruolo", list(CHAT_PRESETS.keys()))
-    # Casella di testo che si autocompila in base alla scelta sopra
     system_input = st.text_area("Istruzioni di Sistema (Modificabili)", value=CHAT_PRESETS[preset_name], height=150)
     
     st.divider()
-    
-    # Tasto per resettare la memoria della chat
     if st.button("🗑️ Nuova Chat", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
-# 3. BLOCCO DI SICUREZZA
-# Se manca la chiave, mostriamo un avviso e fermiamo l'esecuzione della pagina
+# 3. SICUREZZA
 if not api_key:
     st.warning("⚠️ Inserisci la tua API Key nella barra laterale per iniziare.")
     st.stop()
 
-# 4. DISEGNO DELLA CHAT STORICA
-# Scorriamo tutti i messaggi salvati e li stampiamo a schermo
+# 4. RENDERING CRONOLOGIA
 for msg in st.session_state.messages:
-    # Non stampiamo a schermo le istruzioni "segrete" di sistema
     if msg["role"] != "system": 
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"]) # Stampa il testo normale
-            
-            # Se c'è un ragionamento, usa st.json per farlo bello colorato!
-            if "reasoning_details" in msg and msg["reasoning_details"]:
-                with st.expander("💭 Dettagli Ragionamento JSON"):
-                    st.json(msg["reasoning_details"])
+            st.markdown(msg["content"])
+            if msg.get("reasoning_details"):
+                with st.expander("💭 Dettagli Ragionamento"):
+                    # Se è una lista/dizionario lo mostriamo come JSON, altrimenti testo
+                    if isinstance(msg["reasoning_details"], (list, dict)):
+                        st.json(msg["reasoning_details"])
+                    else:
+                        st.write(msg["reasoning_details"])
 
-# 5. INPUT DELL'UTENTE E RISPOSTA
+# 5. LOGICA DI CHAT (STREAMING)
 if prompt := st.chat_input("Scrivi qui il tuo messaggio..."):
     
-    # Se è il primissimo messaggio, aggiungiamo di nascosto il System Prompt scelto
-    if len(st.session_state.messages) == 0 and system_input.strip() != "":
-        st.session_state.messages.append({"role": "system", "content": system_input})
+    # Gestione dinamica del System Prompt: lo aggiorniamo/inseriamo sempre come primo messaggio
+    new_system_msg = {"role": "system", "content": system_input}
+    if not st.session_state.messages:
+        if system_input.strip():
+            st.session_state.messages.append(new_system_msg)
+    elif st.session_state.messages[0]["role"] == "system":
+        st.session_state.messages[0] = new_system_msg # Aggiorna il ruolo esistente
 
-    # Aggiungiamo il messaggio dell'utente alla lista e lo disegniamo
+    # Aggiunta messaggio utente
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Disegniamo la bolla di risposta dell'assistente
+    # Risposta Assistente in Streaming
     with st.chat_message("assistant"):
-        with st.spinner(f"Sto elaborando con {selected_model_name}..."):
-            try:
-                # CHIAMIAMO IL NOSTRO MOTORE ESTERNO (api_engine.py)
-                result = get_chat_response(api_key, model_id, st.session_state.messages)
+        # Contenitori per l'output progressivo
+        reasoning_placeholder = st.empty()
+        content_placeholder = st.empty()
+        
+        full_content = ""
+        full_reasoning = ""
+        
+        try:
+            # Avvio streaming
+            with st.spinner(f"In ascolto da {selected_model_name}..."):
+                stream_gen = get_chat_response_stream(api_key, model_id, st.session_state.messages)
                 
-                # Stampiamo la risposta
-                st.markdown(result["content"])
+                for chunk in stream_gen:
+                    # Gestione Ragionamento
+                    if chunk["reasoning"]:
+                        # Se è il primo pezzo di ragionamento, inizializziamo l'expander visivo
+                        full_reasoning += str(chunk["reasoning"])
+                        with reasoning_placeholder.expander("💭 Sto ragionando...", expanded=True):
+                            st.write(full_reasoning)
+                    
+                    # Gestione Contenuto
+                    if chunk["content"]:
+                        full_content += chunk["content"]
+                        content_placeholder.markdown(full_content + "▌")
                 
-                # Stampiamo il JSON a colori
-                if result["reasoning"]:
-                    with st.expander("💭 Dettagli Ragionamento JSON"):
-                        st.json(result["reasoning"])
+                # Pulizia finale del cursore
+                content_placeholder.markdown(full_content)
                 
-                # Salviamo il tutto nella cronologia per la prossima domanda
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": result["content"], 
-                    "reasoning_details": result["reasoning"]
-                })
-                
-            except Exception as e:
-                # Se c'è un errore, lo convertiamo in testo per analizzarlo
-                error_msg = str(e)
-                
-                # --- GESTIONE 1: Traffico Intenso (Errore 429) ---
-                if "429" in error_msg or "rate-limited" in error_msg:
-                    st.error("🚦 **Traffico Intenso sul Server!**")
-                    st.warning(f"Il modello **{selected_model_name}** al momento è sovraccarico (Troppi utenti stanno usando la versione Free).\n\n👉 **Soluzione:** Scegli un altro modello dal menu a sinistra per continuare a chattare!")
-                
-                # --- GESTIONE 2: Pacchetto Vuoto (Errore NoneType/Server OpenRouter) ---
-                elif "pacchetto vuoto" in error_msg.lower() or "nonetype" in error_msg.lower():
-                    st.error("🔌 **Piccolo singhiozzo del Server!**")
-                    st.info(f"Il server gratuito di OpenRouter che ospita **{selected_model_name}** ha avuto un momento di confusione e non ha inviato la risposta.\n\n✅ *Tranquillo, non hai rotto nulla e la tua chiave API è perfetta!*\n\n👉 **Cosa fare:** Riprova a fargli la stessa domanda, oppure scegli un altro modello dal menu a sinistra.")
-                
-                # --- GESTIONE 3: Tutti gli altri errori ---
-                else:
-                    st.error(f"❌ Ops! Errore di comunicazione: {error_msg}")
+                # Se il ragionamento è finito, chiudiamo l'expander (opzionale: lo lasciamo visibile)
+                if full_reasoning:
+                    with reasoning_placeholder.expander("💭 Ragionamento Completato"):
+                        st.write(full_reasoning)
+
+            # Salvataggio finale in memoria
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": full_content, 
+                "reasoning_details": full_reasoning
+            })
+
+        except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg:
+                st.error("🚦 Traffico Intenso! Prova a cambiare modello.")
+            else:
+                st.error(f"❌ Errore: {error_msg}")

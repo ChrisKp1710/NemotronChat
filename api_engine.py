@@ -4,7 +4,7 @@ from openai import OpenAI
 
 def get_chat_response(api_key, model, messages):
     """
-    Funzione principale per comunicare con OpenRouter.
+    Funzione sincrona standard (Legacy/Fallback).
     """
     client = OpenAI(
         base_url="https://openrouter.ai/api/v1",
@@ -18,42 +18,59 @@ def get_chat_response(api_key, model, messages):
             extra_body={"reasoning": {"enabled": True}}
         )
         
-        # --- 🛡️ NUOVO SCUDO ANTI-CRASH ---
-        # Se OpenRouter ha un momento di down e non manda le 'choices'
         if getattr(response, 'choices', None) is None or len(response.choices) == 0:
-            raise Exception("Il server ha restituito un pacchetto vuoto (Nessuna risposta generata).")
-        # ---------------------------------
+            raise Exception("Il server ha restituito un pacchetto vuoto.")
 
         obj_msg = response.choices[0].message
-        
-        # Estraiamo i dati grezzi
-        content = obj_msg.content
+        content = obj_msg.content or ""
         reasoning = getattr(obj_msg, "reasoning_details", None)
         
-        if content is None:
-            content = ""
-            
-        # --- 🛟 SALVAGENTE SUPER-BLINDATO ---
+        # Salvagente per ragionamento senza contenuto
         if content == "" and reasoning:
             if isinstance(reasoning, list) and len(reasoning) > 0:
-                primo_elemento = reasoning[0]
-                # Controlliamo che sia davvero un dizionario prima di esplorarlo
-                if isinstance(primo_elemento, dict) and 'text' in primo_elemento:
-                    content = primo_elemento['text']
+                content = reasoning[0].get('text', '') if isinstance(reasoning[0], dict) else ""
             elif isinstance(reasoning, str):
                 content = reasoning
-                
-        # Se anche dopo il salvagente è vuoto, evitiamo errori grafici
-        if content == "":
-            # NOTA: Qui ho corretto le virgolette per non far crashare Python!
-            content = "⚠️ Il modello ha 'ragionato', ma non ha scritto nessuna risposta finale."
-        # ------------------------------------
         
-        return {
-            "content": content, 
-            "reasoning": reasoning 
-        }
-        
+        return {"content": content, "reasoning": reasoning}
     except Exception as e:
-        # Passiamo l'errore al file dell'interfaccia grafica in modo pulito
         raise Exception(f"{e}")
+
+def get_chat_response_stream(api_key, model, messages):
+    """
+    Funzione GENERATRICE per lo streaming.
+    Yielda chunk di contenuto e accumula il ragionamento.
+    """
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=api_key,
+    )
+    
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True,
+            extra_body={"reasoning": {"enabled": True}}
+        )
+        
+        for chunk in response:
+            if not chunk.choices:
+                continue
+            
+            delta = chunk.choices[0].delta
+            
+            # 1. Estrazione Ragionamento (se presente nel chunk)
+            # Nota: OpenRouter spesso mette il reasoning in campi custom del delta
+            reasoning_chunk = getattr(delta, "reasoning", None) or getattr(delta, "reasoning_details", None)
+            
+            # 2. Estrazione Contenuto
+            content_chunk = delta.content or ""
+            
+            yield {
+                "content": content_chunk,
+                "reasoning": reasoning_chunk
+            }
+            
+    except Exception as e:
+        raise Exception(f"Errore Streaming: {e}")
