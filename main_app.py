@@ -175,12 +175,18 @@ if prompt := st.chat_input("Scrivi qui il tuo messaggio..."):
         system_msg = [m for m in st.session_state.messages if m["role"] == "system"]
         messages_to_send = system_msg + pruned_history
         
+        # --- 🛡️ SANIFICAZIONE PAYLOAD API ---
+        # OpenRouter non accetta campi extra come 'reasoning_details'. 
+        # Inviamo solo role e content.
+        api_messages = [{"role": m["role"], "content": m["content"]} for m in messages_to_send]
+        # ------------------------------------
+        
         try:
             with st.spinner(f"In ascolto da {selected_model_name}..."):
                 stream_gen = get_chat_response_stream(
                     api_key, 
                     model_id, 
-                    messages_to_send,
+                    api_messages, # Inviato il payload pulito
                     temperature=temp,
                     max_tokens=max_t
                 )
