@@ -3,10 +3,11 @@
 import streamlit as st
 import json
 import os
+from datetime import datetime
 from config import FREE_MODELS, CHAT_PRESETS
 from api_engine import get_chat_response_stream
 
-# --- 📁 GESTIONE PERSISTENZA DATI ---
+# --- 📁 GESTIONE PERSISTENZA E EXPORT ---
 HISTORY_FILE = "chat_history.json"
 
 def save_chat(messages):
@@ -26,6 +27,27 @@ def load_chat():
         except Exception:
             return []
     return []
+
+def export_chat_markdown(messages, model_name):
+    """Genera una stringa Markdown professionale dalla cronologia."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    md_output = f"# 🧠 MindMatrix Chat Session\n"
+    md_output += f"**Modello:** {model_name}  \n"
+    md_output += f"**Data Esportazione:** {timestamp}\n\n"
+    md_output += "---\n\n"
+    
+    for msg in messages:
+        role = msg["role"]
+        if role == "system":
+            md_output += f"### 🎭 Ruolo di Sistema\n> {msg['content']}\n\n---\n\n"
+        elif role == "user":
+            md_output += f"### 👤 Utente\n{msg['content']}\n\n"
+        elif role == "assistant":
+            md_output += f"### 🤖 Assistente\n{msg['content']}\n\n"
+            if msg.get("reasoning_details"):
+                md_output += f"#### 💭 Processo di Ragionamento\n```text\n{msg['reasoning_details']}\n```\n\n"
+            md_output += "---\n\n"
+    return md_output
 
 # 1. CONFIGURAZIONE PAGINA
 st.set_page_config(page_title="MindMatrix Chat", page_icon="🧠", layout="wide")
@@ -95,6 +117,17 @@ with st.sidebar:
         if os.path.exists(HISTORY_FILE):
             os.remove(HISTORY_FILE)
         st.rerun()
+    
+    # --- 📤 ESPORTAZIONE (Corretto Posizionamento) ---
+    if st.session_state.messages:
+        chat_md = export_chat_markdown(st.session_state.messages, selected_model_name)
+        st.download_button(
+            label="📥 Esporta Chat (Markdown)",
+            data=chat_md,
+            file_name=f"chat_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+            mime="text/markdown",
+            use_container_width=True
+        )
 
 # 3. SICUREZZA
 if not api_key:
