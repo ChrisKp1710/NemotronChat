@@ -38,3 +38,6 @@ Thumbs.db
 
 # Project Specific
 /old_python/
+
+# Chat History
+chat_history.json

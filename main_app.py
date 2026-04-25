@@ -1,8 +1,31 @@
 # main_app.py
 
 import streamlit as st
+import json
+import os
 from config import FREE_MODELS, CHAT_PRESETS
 from api_engine import get_chat_response_stream
+
+# --- 📁 GESTIONE PERSISTENZA DATI ---
+HISTORY_FILE = "chat_history.json"
+
+def save_chat(messages):
+    """Salva la cronologia in un file JSON."""
+    try:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(messages, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        st.error(f"Errore nel salvataggio: {e}")
+
+def load_chat():
+    """Carica la cronologia dal file JSON se esiste."""
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
 
 # 1. CONFIGURAZIONE PAGINA
 st.set_page_config(page_title="MindMatrix Chat", page_icon="🧠", layout="wide")
@@ -22,7 +45,7 @@ st.markdown("""
         line-height: 1.5;
         max-height: 350px;
         overflow-y: auto;
-        white-space: pre-wrap; /* Mantiene i ritorni a capo del modello */
+        white-space: pre-wrap;
     }
     .reasoning-title {
         color: #58a6ff;
@@ -37,9 +60,9 @@ st.markdown("""
 
 st.title("🧠 MindMatrix: Multi-Model Streaming")
 
-# Inizializzazione session_state
+# Inizializzazione session_state (Caricamento automatico)
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages = load_chat()
 
 if "current_model" not in st.session_state:
     st.session_state.current_model = list(FREE_MODELS.keys())[0]
@@ -69,6 +92,8 @@ with st.sidebar:
     st.divider()
     if st.button("🗑️ Nuova Chat", use_container_width=True):
         st.session_state.messages = []
+        if os.path.exists(HISTORY_FILE):
+            os.remove(HISTORY_FILE)
         st.rerun()
 
 # 3. SICUREZZA
@@ -112,14 +137,10 @@ if prompt := st.chat_input("Scrivi qui il tuo messaggio..."):
         full_reasoning = ""
         
         # --- ✂️ GESTIONE CONTESTO (MEMORY WINDOW) ---
-        # Prendiamo tutti i messaggi tranne il sistema
         chat_history = [m for m in st.session_state.messages if m["role"] != "system"]
-        # Teniamo solo gli ultimi 'mem_window' messaggi
         pruned_history = chat_history[-mem_window:]
-        # Se c'è un messaggio di sistema, lo mettiamo in cima
         system_msg = [m for m in st.session_state.messages if m["role"] == "system"]
         messages_to_send = system_msg + pruned_history
-        # --------------------------------------------
         
         try:
             with st.spinner(f"In ascolto da {selected_model_name}..."):
@@ -148,11 +169,13 @@ if prompt := st.chat_input("Scrivi qui il tuo messaggio..."):
                         with st.expander("🔍 Visualizza Processo Logico"):
                             display_reasoning(full_reasoning)
 
+            # Aggiunta e salvataggio
             st.session_state.messages.append({
                 "role": "assistant", 
                 "content": full_content, 
                 "reasoning_details": full_reasoning
             })
+            save_chat(st.session_state.messages)
 
         except Exception as e:
             st.error(f"❌ Errore: {str(e)}")
