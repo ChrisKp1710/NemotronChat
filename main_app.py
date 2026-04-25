@@ -124,7 +124,7 @@ with st.sidebar:
         st.download_button(
             label="📥 Esporta Chat (Markdown)",
             data=chat_md,
-            file_name=f"chat_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+            file_name=f"MindMatrix_Export_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.md",
             mime="text/markdown",
             use_container_width=True
         )
