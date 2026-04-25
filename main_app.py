@@ -22,6 +22,7 @@ st.markdown("""
         line-height: 1.5;
         max-height: 350px;
         overflow-y: auto;
+        white-space: pre-wrap; /* Mantiene i ritorni a capo del modello */
     }
     .reasoning-title {
         color: #58a6ff;
@@ -72,12 +73,7 @@ if not api_key:
 # 4. FUNZIONE HELPER PER IL RENDERING DEL RAGIONAMENTO
 def display_reasoning(text, is_streaming=False):
     title = "💭 Sto ragionando..." if is_streaming else "🧠 Pensiero del Modello"
-    st.markdown(f"""
-        <div class="reasoning-box">
-            <div class="reasoning-title">{title}</div>
-            {text}
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f'<div class="reasoning-box"><div class="reasoning-title">{title}</div>{text}</div>', unsafe_allow_html=True)
 
 # 5. RENDERING CRONOLOGIA
 for msg in st.session_state.messages:
