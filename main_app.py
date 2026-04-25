@@ -7,7 +7,7 @@ from datetime import datetime
 from config import FREE_MODELS, CHAT_PRESETS
 from api_engine import get_chat_response_stream
 
-# --- 📁 GESTIONE PERSISTENZA E EXPORT ---
+# --- 📁 GESTIONE DATI (PERSISTENZA, EXPORT, TOKEN) ---
 HISTORY_FILE = "chat_history.json"
 
 def save_chat(messages):
@@ -27,6 +27,12 @@ def load_chat():
         except Exception:
             return []
     return []
+
+def count_tokens(text):
+    """Stima approssimativa dei token (1 token ~ 4 caratteri)."""
+    if not text:
+        return 0
+    return len(text) // 4
 
 def export_chat_markdown(messages, model_name):
     """Genera una stringa Markdown professionale dalla cronologia."""
@@ -111,23 +117,34 @@ with st.sidebar:
         max_t = st.slider("Max Tokens (Lunghezza)", 100, 8000, 2000, 100)
         mem_window = st.slider("Memoria Chat (Messaggi)", 1, 30, 10, 1)
     
-    st.divider()
-    if st.button("🗑️ Nuova Chat", use_container_width=True):
-        st.session_state.messages = []
-        if os.path.exists(HISTORY_FILE):
-            os.remove(HISTORY_FILE)
-        st.rerun()
-    
-    # --- 📤 ESPORTAZIONE (Corretto Posizionamento) ---
-    if st.session_state.messages:
-        chat_md = export_chat_markdown(st.session_state.messages, selected_model_name)
-        st.download_button(
-            label="📥 Esporta Chat (Markdown)",
-            data=chat_md,
-            file_name=f"MindMatrix_Export_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.md",
-            mime="text/markdown",
-            use_container_width=True
-        )
+    # --- 🔐 SEZIONE PROTETTA (VISIBILE SOLO CON API KEY) ---
+    if api_key:
+        st.divider()
+        if st.button("🗑️ Nuova Chat", use_container_width=True):
+            st.session_state.messages = []
+            if os.path.exists(HISTORY_FILE):
+                os.remove(HISTORY_FILE)
+            st.rerun()
+
+        # --- 📤 ESPORTAZIONE ---
+        if st.session_state.messages:
+            chat_md = export_chat_markdown(st.session_state.messages, selected_model_name)
+            st.download_button(
+                label="📥 Esporta Chat (Markdown)",
+                data=chat_md,
+                file_name=f"MindMatrix_Export_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
+
+        # --- 📊 STATISTICHE ---
+        if st.session_state.messages:
+            total_text = "".join([m["content"] for m in st.session_state.messages if m["role"] != "system"])
+            total_tokens = count_tokens(total_text)
+            st.divider()
+            st.caption("📈 Statistiche Sessione")
+            st.info(f"**Token Totali Stimati:** {total_tokens}")
+
 
 # 3. SICUREZZA
 if not api_key:
@@ -176,17 +193,14 @@ if prompt := st.chat_input("Scrivi qui il tuo messaggio..."):
         messages_to_send = system_msg + pruned_history
         
         # --- 🛡️ SANIFICAZIONE PAYLOAD API ---
-        # OpenRouter non accetta campi extra come 'reasoning_details'. 
-        # Inviamo solo role e content.
         api_messages = [{"role": m["role"], "content": m["content"]} for m in messages_to_send]
-        # ------------------------------------
         
         try:
             with st.spinner(f"In ascolto da {selected_model_name}..."):
                 stream_gen = get_chat_response_stream(
                     api_key, 
                     model_id, 
-                    api_messages, # Inviato il payload pulito
+                    api_messages,
                     temperature=temp,
                     max_tokens=max_t
                 )
@@ -215,7 +229,7 @@ if prompt := st.chat_input("Scrivi qui il tuo messaggio..."):
                 "reasoning_details": full_reasoning
             })
             save_chat(st.session_state.messages)
-            st.rerun() # --- FORZA AGGIORNAMENTO UI PER EXPORT ---
+            st.rerun()
 
         except Exception as e:
             st.error(f"❌ Errore: {str(e)}")
