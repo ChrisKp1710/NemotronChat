@@ -215,6 +215,7 @@ if prompt := st.chat_input("Scrivi qui il tuo messaggio..."):
                 "reasoning_details": full_reasoning
             })
             save_chat(st.session_state.messages)
+            st.rerun() # --- FORZA AGGIORNAMENTO UI PER EXPORT ---
 
         except Exception as e:
             st.error(f"❌ Errore: {str(e)}")
