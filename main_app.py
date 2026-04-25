@@ -60,6 +60,12 @@ with st.sidebar:
     preset_name = st.selectbox("🎭 Scegli un Ruolo", list(CHAT_PRESETS.keys()))
     system_input = st.text_area("Istruzioni di Sistema (Modificabili)", value=CHAT_PRESETS[preset_name], height=150)
     
+    # --- 🎛️ PARAMETRI AVANZATI ---
+    with st.expander("🛠️ Parametri Avanzati"):
+        temp = st.slider("Temperatura (Creatività)", 0.0, 2.0, 0.7, 0.1)
+        max_t = st.slider("Max Tokens (Lunghezza)", 100, 8000, 2000, 100)
+        mem_window = st.slider("Memoria Chat (Messaggi)", 1, 30, 10, 1)
+    
     st.divider()
     if st.button("🗑️ Nuova Chat", use_container_width=True):
         st.session_state.messages = []
@@ -105,9 +111,25 @@ if prompt := st.chat_input("Scrivi qui il tuo messaggio..."):
         full_content = ""
         full_reasoning = ""
         
+        # --- ✂️ GESTIONE CONTESTO (MEMORY WINDOW) ---
+        # Prendiamo tutti i messaggi tranne il sistema
+        chat_history = [m for m in st.session_state.messages if m["role"] != "system"]
+        # Teniamo solo gli ultimi 'mem_window' messaggi
+        pruned_history = chat_history[-mem_window:]
+        # Se c'è un messaggio di sistema, lo mettiamo in cima
+        system_msg = [m for m in st.session_state.messages if m["role"] == "system"]
+        messages_to_send = system_msg + pruned_history
+        # --------------------------------------------
+        
         try:
             with st.spinner(f"In ascolto da {selected_model_name}..."):
-                stream_gen = get_chat_response_stream(api_key, model_id, st.session_state.messages)
+                stream_gen = get_chat_response_stream(
+                    api_key, 
+                    model_id, 
+                    messages_to_send,
+                    temperature=temp,
+                    max_tokens=max_t
+                )
                 
                 for chunk in stream_gen:
                     if chunk["reasoning"]:
@@ -121,7 +143,6 @@ if prompt := st.chat_input("Scrivi qui il tuo messaggio..."):
                 
                 content_placeholder.markdown(full_content)
                 
-                # A fine streaming, se c'è stato ragionamento, lo mettiamo in un expander chiuso per pulizia
                 if full_reasoning:
                     with reasoning_placeholder:
                         with st.expander("🔍 Visualizza Processo Logico"):

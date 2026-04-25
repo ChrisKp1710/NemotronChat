@@ -36,10 +36,9 @@ def get_chat_response(api_key, model, messages):
     except Exception as e:
         raise Exception(f"{e}")
 
-def get_chat_response_stream(api_key, model, messages):
+def get_chat_response_stream(api_key, model, messages, temperature=0.7, max_tokens=1000):
     """
-    Funzione GENERATRICE per lo streaming.
-    Yielda chunk di contenuto e accumula il ragionamento.
+    Funzione GENERATRICE per lo streaming con parametri avanzati.
     """
     client = OpenAI(
         base_url="https://openrouter.ai/api/v1",
@@ -51,6 +50,8 @@ def get_chat_response_stream(api_key, model, messages):
             model=model,
             messages=messages,
             stream=True,
+            temperature=temperature,
+            max_tokens=max_tokens,
             extra_body={"reasoning": {"enabled": True}}
         )
         
